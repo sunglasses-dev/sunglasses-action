@@ -70,18 +70,33 @@ while IFS= read -r f; do
 done < "$list"
 
 # merge per-file SARIF into one upload artifact
+# GitHub code scanning rejects multiple runs with the same category (changelog 2025-07-21),
+# so fold every per-file run into ONE run: first run's tool + concatenated results + deduped rules.
 python3 - "$sarif_dir" > sunglasses.sarif <<'PY' || printf '{"version":"2.1.0","runs":[]}' > sunglasses.sarif
 import sys, os, glob, json
-runs, schema, version = [], None, "2.1.0"
-for p in glob.glob(os.path.join(sys.argv[1], "*.sarif")):
+base, results, rules, seen, schema, version = None, [], [], set(), None, "2.1.0"
+for p in sorted(glob.glob(os.path.join(sys.argv[1], "*.sarif"))):
     try:
         d = json.load(open(p))
     except Exception:
         continue
     schema = d.get("$schema", schema)
     version = d.get("version", version)
-    runs.extend(d.get("runs", []))
-out = {"version": version, "runs": runs}
+    for run in d.get("runs", []):
+        if base is None:
+            base = run
+        results.extend(run.get("results", []))
+        for rule in run.get("tool", {}).get("driver", {}).get("rules", []):
+            rid = rule.get("id")
+            if rid not in seen:
+                seen.add(rid)
+                rules.append(rule)
+if base is None:
+    out = {"version": version, "runs": []}
+else:
+    base["results"] = results
+    base.setdefault("tool", {}).setdefault("driver", {})["rules"] = rules
+    out = {"version": version, "runs": [base]}
 if schema:
     out["$schema"] = schema
 json.dump(out, sys.stdout)
