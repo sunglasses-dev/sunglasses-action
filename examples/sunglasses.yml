@@ -1,0 +1,18 @@
+# Copy this file to .github/workflows/sunglasses.yml in your repo.
+name: Sunglasses — agent file scan
+on: [pull_request]
+
+permissions:
+  contents: read
+  security-events: write   # findings appear in the PR "Code scanning" tab
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: sunglasses-dev/sunglasses-action@v1
+        # with:
+        #   paths: "README.md docs/ prompts/ .claude/"
+        #   fail-on-threat: true
+        #   upload-sarif: true

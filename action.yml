@@ -1,0 +1,56 @@
+name: 'Sunglasses — Agent File Scan'
+description: 'Scan agent-readable files (READMEs, docs, prompts, MCP configs) for prompt injection and tool poisoning before your AI agent reads them.'
+author: 'Sunglasses'
+branding:
+  icon: 'eye'
+  color: 'green'
+
+inputs:
+  paths:
+    description: 'Space-separated globs of agent-readable files to scan. Leave empty for the sensible default set (READMEs, AGENTS/CLAUDE.md, **/*.md, docs/**, prompts/**, .cursor/**, .windsurf/**, .claude/**, MCP configs).'
+    required: false
+    default: ''
+  fail-on-threat:
+    description: 'Fail the check (non-zero exit) when a threat is found. Set to "false" to report only.'
+    required: false
+    default: 'true'
+  upload-sarif:
+    description: 'Upload merged SARIF to GitHub code scanning so findings appear inline on the PR. Requires security-events: write.'
+    required: false
+    default: 'true'
+  python-version:
+    description: 'Python version used to install the sunglasses package.'
+    required: false
+    default: '3.x'
+  version:
+    description: 'sunglasses version spec for pip (e.g. "==0.2.71"). Empty installs the latest.'
+    required: false
+    default: ''
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ inputs.python-version }}
+    - name: Install Sunglasses
+      shell: bash
+      run: |
+        if [ -n "${{ inputs.version }}" ]; then
+          pip install "sunglasses${{ inputs.version }}"
+        else
+          pip install sunglasses
+        fi
+    - name: Scan agent-readable files
+      shell: bash
+      env:
+        INPUT_PATHS: ${{ inputs.paths }}
+        INPUT_FAIL_ON_THREAT: ${{ inputs.fail-on-threat }}
+      run: bash "${{ github.action_path }}/entrypoint.sh"
+    - name: Upload SARIF to code scanning
+      if: ${{ always() && inputs.upload-sarif == 'true' && hashFiles('sunglasses.sarif') != '' }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: sunglasses.sarif
+        category: sunglasses
