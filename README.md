@@ -83,6 +83,7 @@ Direct & indirect prompt injection · README / repo poisoning · MCP tool-metada
 - **100% local:** scanning runs entirely inside your runner. No payloads are sent anywhere — no account, no API key, no telemetry.
 - The Action installs the published [`sunglasses`](https://pypi.org/project/sunglasses/) package from PyPI. With `version` empty it installs the **latest** release at run time, so package changes reach your workflow without you upgrading anything — pin `version` if you need lockstep.
 - The Action reads the scanner's JSON document rather than inferring meaning from the exit code alone, so a future change to the scanner's exit map degrades into an honest "could not classify" instead of a false accusation.
+- **Dogfooding:** this repo's own `tests/fixtures/` contains deliberate injection samples, so a scan of this repository will flag them. Scope `paths` to exclude `tests/fixtures` when running the Action against itself.
 - `@v1` is a moving tag that tracks the latest v1.x. Pin a commit SHA if you need immutability; a pinned SHA does **not** move when we publish v1.1.
 
 ## License
