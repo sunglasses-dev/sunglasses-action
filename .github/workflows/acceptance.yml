@@ -1,0 +1,41 @@
+# Runs the Action's own acceptance harness against real scanner builds.
+#
+# This exists because v1 broke silently: the Action was written against a CLI
+# contract ("non-zero means a threat"), the CLI's exit map later grew, and
+# nothing anywhere told us the two had diverged. A matrix leg pinned to a known
+# version plus a leg tracking `latest` turns that class of drift into a red
+# build on the day it happens instead of a false accusation on a user's PR.
+name: acceptance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  # Catches a scanner release that changes behaviour without any change here.
+  schedule:
+    - cron: '0 13 * * 1'
+  workflow_dispatch:
+
+jobs:
+  acceptance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # `pinned` is the version we have measured against; `latest` is what a
+        # user with an empty `version:` input actually gets. While the newest
+        # release IS the pinned one these two legs are identical -- that is
+        # expected, and the leg starts earning its keep the moment they differ.
+        scanner: ['sunglasses==0.5.5', 'sunglasses']
+    name: "scanner: ${{ matrix.scanner }}"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install scanner
+        run: pip install "${{ matrix.scanner }}"
+      - name: Record what we actually installed
+        run: pip show sunglasses | head -2
+      - name: Run acceptance harness
+        run: bash tests/run_tests.sh

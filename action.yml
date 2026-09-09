@@ -7,11 +7,15 @@ branding:
 
 inputs:
   paths:
-    description: 'Space-separated globs of agent-readable files to scan. Leave empty for the sensible default set (READMEs, AGENTS/CLAUDE.md, **/*.md, docs/**, prompts/**, .cursor/**, .windsurf/**, .claude/**, MCP configs).'
+    description: 'Space-separated files, directories or globs to scan. Directories are walked recursively. Leave empty for the sensible default set (READMEs, AGENTS/CLAUDE.md, **/*.md, docs/**, prompts/**, .cursor/**, .windsurf/**, .claude/**, MCP configs).'
     required: false
     default: ''
   fail-on-threat:
     description: 'Fail the check (non-zero exit) when a threat is found. Set to "false" to report only.'
+    required: false
+    default: 'true'
+  fail-on-incomplete:
+    description: 'Fail the check when a file could not be fully inspected (archive, oversized file, unsupported binary, missing path). Set to "false" to report only. A file that was not inspected is never counted as clean either way.'
     required: false
     default: 'true'
   upload-sarif:
@@ -23,7 +27,7 @@ inputs:
     required: false
     default: '3.x'
   version:
-    description: 'sunglasses version spec for pip (e.g. "==0.2.71"). Empty installs the latest.'
+    description: 'sunglasses version spec for pip (e.g. "==0.5.6"). Empty installs the latest published release, so a new release reaches this Action the hour it lands — pin it if you need lockstep.'
     required: false
     default: ''
 
@@ -47,6 +51,7 @@ runs:
       env:
         INPUT_PATHS: ${{ inputs.paths }}
         INPUT_FAIL_ON_THREAT: ${{ inputs.fail-on-threat }}
+        INPUT_FAIL_ON_INCOMPLETE: ${{ inputs.fail-on-incomplete }}
       run: bash "${{ github.action_path }}/entrypoint.sh"
     - name: Upload SARIF to code scanning
       if: ${{ always() && inputs.upload-sarif == 'true' && hashFiles('sunglasses.sarif') != '' }}
