@@ -27,18 +27,27 @@ PY_BIN="${PYTHON_BIN:-python3}"
 FAIL_ON_THREAT="${INPUT_FAIL_ON_THREAT:-true}"
 FAIL_ON_INCOMPLETE="${INPUT_FAIL_ON_INCOMPLETE:-true}"
 
-work="$(mktemp -d)"
-list="$work/list"
-: > "$list"
-# One line per non-clean outcome, for the summary. Kept in files rather than
-# arrays so the counts and the report can never drift apart.
-: > "$work/threats"
-: > "$work/incomplete"
-: > "$work/errors"
-: > "$work/notes"
-
+# A work directory that cannot be made means the scan cannot run. Without the
+# checks below the list file was not created, the count came out empty, and the
+# check passed with nothing scanned. That is exit 2, the operational error code.
+work="$(mktemp -d)" || work=""
+if [ -z "$work" ] || [ ! -d "$work" ]; then
+  echo "::error::Sunglasses could not create a work directory. Nothing was scanned."
+  exit 2
+fi
 cleanup() { rm -rf "$work"; }
 trap cleanup EXIT
+
+# The list holds one NUL-terminated path per entry, so a file name that contains
+# a newline stays one entry.
+list="$work/list"
+# One line per non-clean outcome, for the summary. Kept in files rather than
+# arrays so the counts and the report can never drift apart.
+{ : > "$list" && : > "$work/threats" && : > "$work/incomplete" \
+    && : > "$work/errors" && : > "$work/notes"; } 2>/dev/null || {
+  echo "::error::Sunglasses could not write to its work directory. Nothing was scanned."
+  exit 2
+}
 
 # ---------------------------------------------------------------- discovery --
 # v1 dropped anything that was not a plain existing file, silently. A directory
@@ -46,11 +55,49 @@ trap cleanup EXIT
 # matched nothing and vanished, so the job reported a green "1 clean, 1 scanned"
 # for a repo where two whole directories were never opened. Directories are now
 # walked, and a path that genuinely is not there is REPORTED rather than dropped.
+#
+# A symlink is listed like a file. One that points at a file inside the workspace
+# is scanned under its own name, because an agent that opens the link reads the
+# target. One that cannot be read here (broken, a directory, or leaving the
+# workspace) is REPORTED as not inspected, not skipped.
+workspace="$(pwd -P)"
+
+report_not_inspected() {
+  # The default set can reach one file by two routes, so a repeat is not counted twice.
+  grep -Fxq -- "$(printf '%s\t%s' "$1" "$2")" "$work/incomplete" && return
+  printf '%s\t%s\n' "$1" "$2" >> "$work/incomplete"
+  echo "::warning::Sunglasses could not scan '$1': $2. It was NOT inspected."
+}
+
+add_candidate() {
+  local f="${1#./}"
+  if [ -L "$f" ]; then
+    if [ ! -e "$f" ]; then
+      report_not_inspected "$f" "broken symlink"
+      return
+    elif [ -d "$f" ]; then
+      report_not_inspected "$f" "symlink to a directory, not followed"
+      return
+    fi
+    local real
+    real="$("$PY_BIN" -c 'import os,sys;print(os.path.realpath(sys.argv[1]))' "$f" 2>/dev/null)"
+    case "$real" in
+      "$workspace"/*) ;;
+      *) report_not_inspected "$f" "symlink points outside the workspace, not followed"
+         return ;;
+    esac
+  fi
+  [ -f "$f" ] || return
+  printf '%s\0' "$f" >> "$list"
+}
+
 add_path() {
-  if [ -d "$1" ]; then
-    find "$1" -type f 2>/dev/null | sed 's|^\./||' >> "$list"
-  elif [ -f "$1" ]; then
-    printf '%s\n' "$1" | sed 's|^\./||' >> "$list"
+  if [ -d "$1" ] && [ ! -L "$1" ]; then
+    while IFS= read -r -d '' found; do
+      add_candidate "$found"
+    done < <(find "$1" \( -type f -o -type l \) -print0 2>/dev/null)
+  else
+    add_candidate "$1"
   fi
 }
 
@@ -58,7 +105,7 @@ if [ -n "${INPUT_PATHS:-}" ]; then
   for g in $INPUT_PATHS; do
     matched=0
     for f in $g; do
-      if [ -e "$f" ]; then
+      if [ -e "$f" ] || [ -L "$f" ]; then
         add_path "$f"
         matched=1
       fi
@@ -73,16 +120,21 @@ if [ -n "${INPUT_PATHS:-}" ]; then
           # An explicit path the user asked us to scan and we could not: that is
           # exactly the "asked for, never inspected" case this release exists to
           # make visible, so it counts as incomplete rather than disappearing.
-          printf '%s\tnot found\n' "$g" >> "$work/incomplete"
-          echo "::warning::Sunglasses could not scan '$g': not found. It was NOT inspected."
+          report_not_inspected "$g" "not found"
           ;;
       esac
     fi
   done
 else
-  {
-    ls -1 README* readme* AGENTS.md AGENT.md CLAUDE.md GEMINI.md 2>/dev/null
-    find . -type f \( \
+  for n in README* readme* AGENTS.md AGENT.md CLAUDE.md GEMINI.md \
+           .cursorrules .clinerules .windsurfrules llms.txt; do
+    if [ -e "$n" ] || [ -L "$n" ]; then
+      add_candidate "$n"
+    fi
+  done
+  while IFS= read -r -d '' found; do
+    add_candidate "$found"
+  done < <(find . \( -type f -o -type l \) \( \
          -name '*.md' \
       -o -path './docs/*' \
       -o -path './prompts/*' \
@@ -92,17 +144,21 @@ else
       -o -path './.claude/*' \
       -o -name 'mcp.json' \
       -o -name '*.mcp.json' \
-    \) 2>/dev/null | sed 's|^\./||'
-  } >> "$list"
+    \) -print0 2>/dev/null)
 fi
 
-sort -u "$list" | sed '/^$/d' > "$list.u" && mv "$list.u" "$list"
+sort -z -u "$list" > "$list.u" && mv "$list.u" "$list"
 
 summary="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
 printf '## 😎 Sunglasses — agent file scan\n\n' >> "$summary"
 
-count="$(wc -l < "$list" | tr -d ' ')"
+count="$(tr -cd '\0' < "$list" | wc -c | tr -d ' ')"
 skipped_pre="$(wc -l < "$work/incomplete" | tr -d ' ')"
+case "$count$skipped_pre" in
+  ''|*[!0-9]*)
+    echo "::error::Sunglasses could not read its file list. Nothing was scanned."
+    exit 2 ;;
+esac
 
 if [ "$count" -eq 0 ] && [ "$skipped_pre" -eq 0 ]; then
   echo "Sunglasses: no agent-readable files matched. Nothing to scan."
@@ -119,7 +175,9 @@ incomplete="$skipped_pre"
 errors=0
 clean=0
 
-while IFS= read -r f; do
+visited=0
+while IFS= read -r -d '' f; do
+  visited=$((visited + 1))
   [ -n "$f" ] || continue
 
   # ONE scan per file. `--json` is deliberate: on the published 0.5.5,
@@ -175,6 +233,13 @@ while IFS= read -r f; do
       ;;
   esac
 done < "$list"
+
+# The loop has to visit the entries it was given. A shortfall means entries were
+# lost on the way, and a scan that lost files cannot pass.
+if [ "$visited" -ne "$count" ]; then
+  errors=$((errors + 1))
+  echo "::error::Sunglasses visited $visited of $count listed files. The rest were NOT inspected."
+fi
 
 # A run with zero results (not an empty runs array) is what lets code scanning
 # clear alerts we reported on a previous commit.

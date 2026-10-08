@@ -32,7 +32,9 @@ That's it. On every PR, Sunglasses scans the sensible default set of agent-reada
 
 ## What it scans (defaults)
 
-`README*`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, every `*.md`, and `docs/`, `prompts/`, `.cursor/`, `.windsurf/`, `.claude/`, plus `mcp.json` / `*.mcp.json`. Override with the `paths` input.
+`README*`, `AGENTS.md`, `CLAUDE.md`, `GEMINI.md`, `.cursorrules`, `.clinerules`, `.windsurfrules`, `llms.txt`, the `*.md` files, and `docs/`, `prompts/`, `.cursor/`, `.windsurf/`, `.claude/`, plus `mcp.json` / `*.mcp.json`. Override with the `paths` input.
+
+A symlink is scanned under its own name when it points at a file inside the checkout. A symlink that is broken, points at a directory or leaves the checkout is listed under **not inspected**, so it cannot pass as clean.
 
 ## Inputs
 

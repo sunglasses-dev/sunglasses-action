@@ -7,7 +7,7 @@ branding:
 
 inputs:
   paths:
-    description: 'Space-separated files, directories or globs to scan. Directories are walked recursively. Leave empty for the sensible default set (READMEs, AGENTS/CLAUDE.md, **/*.md, docs/**, prompts/**, .cursor/**, .windsurf/**, .claude/**, MCP configs).'
+    description: 'Space-separated files, directories or globs to scan. Directories are walked recursively. Leave empty for the sensible default set (READMEs, AGENTS/CLAUDE.md, .cursorrules, .clinerules, .windsurfrules, llms.txt, **/*.md, docs/**, prompts/**, .cursor/**, .windsurf/**, .claude/**, MCP configs).'
     required: false
     default: ''
   fail-on-threat:
