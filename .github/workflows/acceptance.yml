@@ -18,7 +18,7 @@ on:
 
 jobs:
   acceptance:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -27,7 +27,14 @@ jobs:
         # release IS the pinned one these two legs are identical -- that is
         # expected, and the leg starts earning its keep the moment they differ.
         scanner: ['sunglasses==0.5.5', 'sunglasses']
-    name: "scanner: ${{ matrix.scanner }}"
+        # Our gates run on a pinned image. Users who copy the README run on
+        # `ubuntu-latest`, which moves to Ubuntu 26 from October 19, 2026, so one
+        # extra leg tracks that label and tells us first if the Action breaks there.
+        os: ['ubuntu-24.04']
+        include:
+          - scanner: 'sunglasses'
+            os: 'ubuntu-latest'
+    name: "scanner: ${{ matrix.scanner }}${{ matrix.os != 'ubuntu-24.04' && format(' on {0}', matrix.os) || '' }}"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
