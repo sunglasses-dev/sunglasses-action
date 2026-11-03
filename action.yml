@@ -40,9 +40,20 @@ runs:
         python-version: ${{ inputs.python-version }}
     - name: Install Sunglasses
       shell: bash
+      env:
+        INPUT_VERSION: ${{ inputs.version }}
       run: |
-        if [ -n "${{ inputs.version }}" ]; then
-          pip install "sunglasses${{ inputs.version }}"
+        # The version spec reaches bash as data ($INPUT_VERSION), not as script
+        # text, and only the characters a pip version specifier can contain are
+        # accepted; anything else is refused with the usage error code (2). The
+        # refused value is not echoed, so it cannot smuggle a workflow command.
+        if [ -n "$INPUT_VERSION" ]; then
+          case "$INPUT_VERSION" in
+            *[!A-Za-z0-9.="<>"!~,*+" "-]*)
+              echo "::error::version must be a pip version specifier such as ==0.5.6; refusing the given value"
+              exit 2 ;;
+          esac
+          pip install "sunglasses${INPUT_VERSION}"
         else
           pip install sunglasses
         fi
