@@ -43,7 +43,7 @@ That's it. On every PR, Sunglasses scans the sensible default set of agent-reada
 | `fail-on-incomplete` | `true` | Fail the check when a file could not be fully inspected (archive, oversized file, unsupported binary, missing path). Set `false` to report-only. Either way, a file that was not inspected is **never counted as clean**. |
 | `upload-sarif` | `true` | Upload merged SARIF to GitHub code scanning (needs `security-events: write`). |
 | `python-version` | `3.x` | Python used to install the `sunglasses` package. |
-| `version` | *(latest)* | Pin a `sunglasses` version, e.g. `==0.5.6`. Empty installs the latest published release, so a new release reaches your workflow the hour it lands. |
+| `version` | *(latest)* | Pin a `sunglasses` version, e.g. `==0.5.6`. Only the characters of a version specifier are accepted (letters, digits, `. _ = < > ! ~ , * + -`, space and tab); anything else stops the step with exit 2. Empty installs the latest published release, so a new release reaches your workflow the hour it lands. |
 
 ## What the check means
 

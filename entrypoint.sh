@@ -24,6 +24,9 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SG_BIN="${SUNGLASSES_BIN:-sunglasses}"
 PY_BIN="${PYTHON_BIN:-python3}"
 
+# shellcheck source=lib/gh_escape.sh
+. "$HERE/lib/gh_escape.sh"
+
 FAIL_ON_THREAT="${INPUT_FAIL_ON_THREAT:-true}"
 FAIL_ON_INCOMPLETE="${INPUT_FAIL_ON_INCOMPLETE:-true}"
 
@@ -74,7 +77,7 @@ if [ -n "${INPUT_PATHS:-}" ]; then
           # exactly the "asked for, never inspected" case this release exists to
           # make visible, so it counts as incomplete rather than disappearing.
           printf '%s\tnot found\n' "$g" >> "$work/incomplete"
-          echo "::warning::Sunglasses could not scan '$g': not found. It was NOT inspected."
+          echo "::warning::Sunglasses could not scan '$(gh_escape "$g")': not found. It was NOT inspected."
           ;;
       esac
     fi
@@ -146,7 +149,7 @@ while IFS= read -r f; do
     threat)
       threats=$((threats + 1))
       printf '%s\t%s\n' "$f" "${reason:-finding}" >> "$work/threats"
-      echo "::error file=$f::Sunglasses detected an agent-targeted injection in $f"
+      echo "::error file=$(gh_escape -p "$f")::Sunglasses detected an agent-targeted injection in $(gh_escape "$f")"
       # SARIF only for real findings. A file we could not inspect must never
       # arrive in the security tab as an alert -- see lib/merge_sarif.py.
       safe_name="$(printf '%s' "$f" | tr '/ ' '__')"
@@ -161,7 +164,7 @@ while IFS= read -r f; do
     incomplete)
       incomplete=$((incomplete + 1))
       printf '%s\t%s\n' "$f" "${reason:-not fully inspected}" >> "$work/incomplete"
-      echo "::warning file=$f::not inspected: ${reason:-the file was not fully inspected}"
+      echo "::warning file=$(gh_escape -p "$f")::not inspected: $(gh_escape "${reason:-the file was not fully inspected}")"
       ;;
     clean)
       clean=$((clean + 1))
@@ -171,7 +174,7 @@ while IFS= read -r f; do
       errors=$((errors + 1))
       printf '%s\t%s\n' "$f" "${reason:-the scanner failed}" >> "$work/errors"
       # Deliberately NOT the injection wording. The scan did not happen.
-      echo "::error file=$f::Sunglasses could not scan $f (${reason:-scanner error}). It was NOT inspected — this is not a clean result."
+      echo "::error file=$(gh_escape -p "$f")::Sunglasses could not scan $(gh_escape "$f") ($(gh_escape "${reason:-scanner error}")). It was NOT inspected — this is not a clean result."
       ;;
   esac
 done < "$list"

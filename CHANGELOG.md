@@ -11,6 +11,14 @@ clean.
 
 ### Fixed
 
+- **The `version` input reaches the install step as data, not as script text.** The step
+  now reads `$INPUT_VERSION` from `env:` and refuses any value outside the characters of
+  a version specifier (exit 2, the value is not echoed). Extras, direct URLs and
+  environment markers are refused.
+- **Values written into workflow-command lines are escaped.** File paths and scanner
+  reasons go through one helper (`lib/gh_escape.sh`) before they are printed after
+  `::error` or `::warning`, so a path or reason with a newline, `%`, `,` or `:` cannot
+  start a second command or change a property.
 - **A file that was not scanned is never reported as an injection.** Operational
   failures (missing path, unreadable file, scanner crash, any unexpected exit
   code) now produce `::error … could not scan … It was NOT inspected`, and fail
